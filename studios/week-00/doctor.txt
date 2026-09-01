@@ -1,0 +1,15 @@
+CMP-5006 environment check
+----------------------------------------------------------
+?£ö Python 3.13.12
+?£ö numpy 2.5.2, requests 2.34.2
+?£ö optional: matplotlib MISSING, pytest MISSING, pandas MISSING
+! Docker: docker is installed but the daemon is not running
+    Weeks 6-10 need it. Install Docker Desktop / docker-ce, or use
+    the hosted-sandbox fallback in each lab guide.
+?£ö backend ollama  serving (1 model(s))
+?£ö backend manual  always available
+?£ö backend echo    always available (testing only ??ö not a model)
+?£ö LLM backend: ollama (qwen2.5:3b) ??ö 6.9s
+?£ö .llm_cache/ writable (0 entries)
+----------------------------------------------------------
+?å¯ Ready.

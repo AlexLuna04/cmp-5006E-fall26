@@ -36,9 +36,12 @@ def frequency_guess_key(ciphertext):
         letters, commonest first.
       - ``zip`` the two rankings.
     """
-    # TODO: build and return the frequency-rank decryption map.
-    raise NotImplementedError
 
+    cipher_ranked = [s for s, _ in letter_counts(ciphertext).most_common()]
+    eng_ranked = sorted(ENGLISH_FREQ, key=ENGLISH_FREQ.get, reverse=True)
+
+    guess = {c: e for c, e in zip(cipher_ranked, eng_ranked)}
+    return guess
 
 def crack(ciphertext, restarts=8, iters=3000, seed=0):
     """Recover the decryption key by hill-climbing the bigram ``score``.
@@ -65,8 +68,50 @@ def crack(ciphertext, restarts=8, iters=3000, seed=0):
     NOTE: nothing in this function may reference the true key or the plaintext.
     The only inputs are the ciphertext and the public ``score`` / ``ENGLISH_FREQ``.
     """
-    # TODO: implement the random-restart hill climb described above.
-    raise NotImplementedError
+
+    import random
+
+    rng = random.Random(seed)
+
+    best_overall = None
+    best_key_overall = None
+
+    for _ in range(restarts):
+        # Start from the frequency-analysis guess
+        key = frequency_guess_key(ciphertext)
+
+        # Complete the partial mapping into a full permutation
+        used = set(key.values())
+        spare = [letter for letter in ALPHABET if letter not in used]
+
+        for cipher_symbol in ALPHABET:
+            if cipher_symbol not in key:
+                key[cipher_symbol] = spare.pop()
+
+        # Score the initial candidate
+        current = score(apply_guess(ciphertext, key))
+
+        # Hill-climb
+        for _ in range(iters):
+            a, b = rng.sample(ALPHABET, 2)
+
+            # Try swapping two plaintext assignments
+            key[a], key[b] = key[b], key[a]
+
+            trial = score(apply_guess(ciphertext, key))
+
+            if trial > current:
+                current = trial
+            else:
+                # Swap back if it did not improve the score
+                key[a], key[b] = key[b], key[a]
+
+        # Keep the best result across all restarts
+        if best_overall is None or current > best_overall:
+            best_overall = current
+            best_key_overall = dict(key)
+
+    return best_key_overall
 
 
 # ---- Task: defeat your own attack (analysis, no test) -----------------------
