@@ -1,4 +1,4 @@
-"""Week 3 studio — starter (three misuse exploits).
+"""Week 3 studio — starter (three misuse exploits), COMPLETADO.
 
 Fill in the three functions below. Then run ``python3 test_modes.py``.
 All provided tests must pass, INCLUDING the guarantee test that watches the
@@ -19,11 +19,9 @@ def ecb_leak_count(image: bytes, key: bytes) -> int:
     blocks. Because ECB maps identical plaintext blocks to identical ciphertext
     blocks, this equals the number of distinct plaintext blocks — the structure
     leaks 1:1. For the provided IMAGE this should be 2 (the two flat regions).
-
-    Hint: ``ecb_encrypt(image, key)`` then ``distinct_blocks(...)``.
     """
-    # TODO: ECB-encrypt the image and count distinct ciphertext blocks.
-    raise NotImplementedError
+    ct = ecb_encrypt(image, key)
+    return distinct_blocks(ct)
 
 
 # ---- Task 2: CTR nonce reuse == week-2 two-time pad -------------------------
@@ -35,11 +33,9 @@ def recover_second_plaintext(c1: bytes, c2: bytes, known_m1: bytes) -> bytes:
 
     This is the EXACT week-2 two-time-pad break on a modern mode: the keystream
     cancels, so  c1 ⊕ c2 == m1 ⊕ m2,  therefore  m2 == c1 ⊕ c2 ⊕ m1.
-
-    Use ``xor(...)`` from ``modes``. Return bytes of length ``len(known_m1)``.
     """
-    # TODO: cancel the shared keystream and solve for m2.
-    raise NotImplementedError
+    diff = xor(c1, c2)
+    return xor(diff, known_m1)
 
 
 # ---- Task 3: forge a H(secret‖msg) MAC by length extension ------------------
@@ -61,9 +57,11 @@ def forge_extension(observed_msg: bytes, observed_tag: int, secret_len: int,
       3. forged_msg = observed_msg + pad + extension
       4. forged_tag = md_hash(extension, iv=observed_tag)   # resume from the tag
     """
-    # TODO: build forged_msg with the glue padding, then resume md_hash from
-    #       observed_tag to produce forged_tag.
-    raise NotImplementedError
+    total = secret_len + len(observed_msg)
+    pad = bytes((-total) % 4)                         # replica el padding interno
+    forged_msg = observed_msg + pad + extension
+    forged_tag = md_hash(extension, iv=observed_tag)  # resume desde el tag observado
+    return forged_msg, forged_tag
 
 
 if __name__ == "__main__":
@@ -71,23 +69,14 @@ if __name__ == "__main__":
     from data import IMAGE, M1, M2, CRIB, MAC_SECRET, MAC_MSG, MAC_EXTENSION
 
     key = os.urandom(16)
-    try:
-        print("ECB distinct ciphertext blocks:", ecb_leak_count(IMAGE, key),
-              "(expected 2 — structure leaks)")
-    except NotImplementedError:
-        print("ecb_leak_count: not implemented yet")
+    print("ECB distinct ciphertext blocks:", ecb_leak_count(IMAGE, key),
+          "(expected 2 — structure leaks)")
 
     nonce = os.urandom(8)  # the BUG: reused across both messages below
     ks = ctr_keystream(key, nonce, max(len(M1), len(M2)))
     c1, c2 = xor(M1, ks), xor(M2, ks)
-    try:
-        print("recovered m2:", recover_second_plaintext(c1, c2, M1))
-    except NotImplementedError:
-        print("recover_second_plaintext: not implemented yet")
+    print("recovered m2:", recover_second_plaintext(c1, c2, M1))
 
     tag = bad_mac(MAC_SECRET, MAC_MSG)
-    try:
-        fm, ft = forge_extension(MAC_MSG, tag, len(MAC_SECRET), MAC_EXTENSION)
-        print(f"forged msg {fm!r} tag valid? {bad_mac(MAC_SECRET, fm) == ft}")
-    except NotImplementedError:
-        print("forge_extension: not implemented yet")
+    fm, ft = forge_extension(MAC_MSG, tag, len(MAC_SECRET), MAC_EXTENSION)
+    print(f"forged msg {fm!r} tag valid? {bad_mac(MAC_SECRET, fm) == ft}")
