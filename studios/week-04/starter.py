@@ -34,9 +34,21 @@ def batch_gcd_recover(corpus):
     shared prime (both fall). Given the shared prime, ``factor_from_shared`` in
     rsa_lab turns it into d.
     """
-    # TODO: pairwise-GCD scan over corpus["keys"]; for any pair with gcd != 1,
-    # recover d for BOTH keys via factor_from_shared(n, gcd, e).
-    raise NotImplementedError
+    keys = corpus["keys"]
+    recovered = {}
+    n_keys = len(keys)
+
+    for i in range(n_keys):
+        for j in range(i + 1, n_keys):
+            ni, ei = keys[i]["n"], keys[i]["e"]
+            nj, ej = keys[j]["n"], keys[j]["e"]
+            g = math.gcd(ni, nj)
+            if g != 1:
+                # g is the shared prime — both moduli fall from this one GCD.
+                recovered[i] = factor_from_shared(ni, g, ei)
+                recovered[j] = factor_from_shared(nj, g, ej)
+
+    return recovered
 
 
 # ---- Task 3: timing side-channel attack -------------------------------------
@@ -54,11 +66,16 @@ def timing_attack(secret_len, oracle, rounds=41):
     ``time_guesses(oracle, guesses, rounds)`` (it interleaves them so drift can't
     bias one candidate), then keep the slowest byte.
     """
-    # TODO: for pos in range(secret_len):
-    #   guesses = [known_prefix + bytes([b]) + padding for b in range(256)]
-    #   med = time_guesses(oracle, guesses, rounds)
-    #   append the byte with the largest median time to the recovered prefix.
-    raise NotImplementedError
+    recovered = bytearray()
+
+    for pos in range(secret_len):
+        padding = bytes(secret_len - pos - 1)
+        guesses = [bytes(recovered) + bytes([b]) + padding for b in range(256)]
+        times = time_guesses(oracle, guesses, rounds=rounds)
+        best_byte = max(range(256), key=lambda b: times[b])
+        recovered.append(best_byte)
+
+    return bytes(recovered)
 
 
 # ---- Task 3 (fix): constant-time comparison ---------------------------------
@@ -66,9 +83,14 @@ def timing_attack(secret_len, oracle, rounds=41):
 def constant_time_equal(a, b):
     """The fix. Examine EVERY byte regardless of mismatches, so the duration does
     not depend on the secret. (In real code, call ``hmac.compare_digest``.)"""
-    # TODO: length check, then accumulate x ^ y across all bytes; return whether
-    # the accumulator is 0 — never early-exit.
-    raise NotImplementedError
+    if len(a) != len(b):
+        return False
+
+    result = 0
+    for x, y in zip(a, b):
+        result |= x ^ y          # accumulate differences; never early-exit
+
+    return result == 0
 
 
 if __name__ == "__main__":
